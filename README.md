@@ -28,6 +28,11 @@ I made the app logo in [Photopea](https://www.photopea.com/) (not with AI). The 
 
 ## "Screenshots" (je sais pas prendre un screenshot sur mon flip phone)
 
+<img width="500" alt="P_20261011_190226" src="https://github.com/user-attachments/assets/88c0f2f0-61dd-49fa-9c3b-b9cb990e17f4" />
+<img width="500" alt="P_20261011_190245" src="https://github.com/user-attachments/assets/98f47f53-d49f-497c-9326-bd5642e0e3d3" />
+<img width="500" alt="P_20261011_190258" src="https://github.com/user-attachments/assets/4f363b30-35e2-40f9-91f9-4251d657c256" />
+
+
 ## Comment installer ? How to install
 
 ### En français
