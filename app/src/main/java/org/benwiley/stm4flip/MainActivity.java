@@ -604,9 +604,11 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(queryNow);
         final int myGen = ++gen;
 
+        final String zoomPrompt = "Faut zoomer plus pour voir les bus !";
+
         if (map.getZoomLevelDouble() < STOP_MARKERS_MIN_ZOOM - 0.01) {   // zoomed out too far: show nothing, request nothing
             showRows(new ArrayList<Transit.Row>());
-            baseStatus = "Faut zoomer plus pour voir les bus !";
+            baseStatus = zoomPrompt;
             refreshBottomBar();
             map.invalidate();
             return;
@@ -640,7 +642,7 @@ public class MainActivity extends Activity {
                     @Override public void run() {
                         if (myGen != gen || gate != Gate.NONE) return;   // superseded, or data is being replaced
                         showRows(res.rows);
-                        baseStatus = res.status;
+                        baseStatus = listPanel.getVisibility() == View.VISIBLE ? res.status : zoomPrompt;
                         refreshBottomBar();
                         map.invalidate();
                     }
