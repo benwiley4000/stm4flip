@@ -606,6 +606,7 @@ public class MainActivity extends Activity {
 
         if (map.getZoomLevelDouble() < STOP_MARKERS_MIN_ZOOM - 0.01) {   // zoomed out too far: show nothing, request nothing
             showRows(new ArrayList<Transit.Row>());
+            baseStatus = "Faut zoomer plus pour voir les bus !";
             refreshBottomBar();
             map.invalidate();
             return;
