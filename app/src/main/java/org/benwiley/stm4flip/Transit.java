@@ -193,6 +193,11 @@ final class Transit {
         return rows;
     }
 
+    /** True if an arrival this many seconds away is shown as "minutes from now" (within the next 59 minutes). */
+    static boolean isSoon(int sec) {
+        return sec < (MAX_LIVE_MINUTES + 1) * 60;
+    }
+
     /** Minutes since midnight -> "14:05". */
     static String fmtClock(int minOfDay) {
         int h = (minOfDay / 60) % 24, m = minOfDay % 60;

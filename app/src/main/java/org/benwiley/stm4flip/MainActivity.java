@@ -707,13 +707,16 @@ public class MainActivity extends Activity {
             sb.setSpan(new StyleSpan(Typeface.BOLD), 0, label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             sb.setSpan(new ForegroundColorSpan(Color.BLACK), 0, label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             for (int k = 0; k < row.etaSec.length; k++) {
+                // Anything arriving within the hour (live or scheduled) is shown as minutes from now, in bold.
+                // Later scheduled times are shown as plain clock times. Blue = live, black = scheduled.
+                boolean soon = Transit.isSoon(row.etaSec[k]);
                 String t = String.format(Locale.CANADA_FRENCH, " %5s",
-                        row.live[k] ? Transit.fmt(row.etaSec[k]) : Transit.fmtClock(row.clockMin[k]));
+                        soon ? Transit.fmt(row.etaSec[k]) : Transit.fmtClock(row.clockMin[k]));
                 int s = sb.length();
                 sb.append(t);
                 sb.setSpan(new ForegroundColorSpan(row.live[k] ? LIVE_BLUE : Color.BLACK), s, sb.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                if (row.live[k]) sb.setSpan(new StyleSpan(Typeface.BOLD), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (soon) sb.setSpan(new StyleSpan(Typeface.BOLD), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             TextView tv = new TextView(this);
             tv.setTypeface(Typeface.MONOSPACE);
