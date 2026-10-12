@@ -367,7 +367,7 @@ public class MainActivity extends Activity {
         gateView.setClickable(true);   // swallow touches so the map underneath can't be used
 
         TextView head = new TextView(this);
-        head.setText("STM Map");
+        head.setText("STM 4 Flip");
         head.setTextColor(Color.WHITE);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         head.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
