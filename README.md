@@ -10,7 +10,7 @@ Here's an Android app that shows, on a flip phone, the next bus arrivals whereve
 
 Une intégration entre Open Street Map et les APIs publics du STM, avec de la navigation par bouton. Ça permet de voir la liste d'autobus qui arrivent prochainement dans la portion de carte qui est actuellement visible, ainsi que les emplacements d'arrêts d'autobus. Vous pouvez déplacer la carte pour voir des infos pour n'importe où à Montréal.
 
-An integration between Open Street Map and the public STM APIs, with button navigation. It lets you see the list of buses that arrive soon in the area of the map that is currently visible, as well as the locations of bus stops. You can move the map around to see info pour anywhere in Montreal.
+An integration between Open Street Map and the public STM APIs, with button navigation. It lets you see the list of buses that arrive soon in the area of the map that is currently visible, as well as the locations of bus stops. You can move the map around to see info for anywhere in Montreal.
 
 ## AI Disclaimer IA
 
