@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
     static final int LIVE_BLUE = THEME;     // live ETAs
     static final int GREY = Color.parseColor("#666666");
     static final String USER_AGENT = "Stm4Flip/1.0 (therealbenwiley@gmail.com)";
-    static final double DEFAULT_ZOOM = 16;
+    static final double DEFAULT_ZOOM = 15;
     static final double STOP_MARKERS_MIN_ZOOM = 13;     // 2 levels out from default: below this, no list / no requests
     static final double LIST_MIN_ZOOM = 15;     // List of arriving buses
     static final double ROUTES_ZOOM = 16;       // stop bubbles (route list only) from this zoom
