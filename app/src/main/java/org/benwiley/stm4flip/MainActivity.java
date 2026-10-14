@@ -118,7 +118,8 @@ public class MainActivity extends Activity {
     private volatile boolean updateAvailable = false;
     private volatile long lastUpdateCheckMs = 0;
     private String updateNote = "";      // shown in front of the normal status text
-    private String baseStatus = "Chargement...";
+    private String baseStatus = "Chargement…";
+    private String locationText = "Localisation…";
     private int gen = 0;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -185,7 +186,7 @@ public class MainActivity extends Activity {
         topBar = new TextView(this);
         topBar.setBackgroundColor(GREY);
         topBar.setTextColor(Color.WHITE);
-        topBar.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        topBar.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         topBar.setPadding(4, 4, 4, 4);
         topBar.setSingleLine(true);
         topBar.setEllipsize(TextUtils.TruncateAt.END);
@@ -198,7 +199,7 @@ public class MainActivity extends Activity {
         bottomBar.setPadding(8, 4, 8, 4);
         bottomBar.setSingleLine(true);
         bottomBar.setEllipsize(TextUtils.TruncateAt.END);
-        bottomBar.setText(baseStatus);
+        refreshBottomBar();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -343,8 +344,10 @@ public class MainActivity extends Activity {
     private void startLocation() {
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+            locationText = "Position indispo";
             return;
         }
+        locationText = "Localisation…";
         Location best = null;
         for (String prov : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
             try {
@@ -367,6 +370,7 @@ public class MainActivity extends Activity {
             initialPosition = p;
         } else {
             overlay.me = p;
+            locationText = "Localisé";
         }
         if (!userMoved) {
             lastCenter = p;
@@ -415,7 +419,7 @@ public class MainActivity extends Activity {
         gateKey.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         gateKey.setBackgroundColor(THEME);
         gateKey.setPadding(8, 4, 8, 4);
-        gateText.setText("Chargement du réseau d'autobus...");
+        gateText.setText("Chargement du réseau d'autobus…");
         gateKey.setVisibility(View.INVISIBLE);
 
         gateView.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -444,11 +448,11 @@ public class MainActivity extends Activity {
     private static final String ASK_UPDATE = "De nouvelles données de réseau sont disponibles (~50MB). Ça va télécharger et installer dans le fond. OK ?";
 
     private void refreshBottomBar() {
-        bottomBar.setText((updateNote.isEmpty() ? "" : updateNote + " | ") + baseStatus);
+        bottomBar.setText((updateNote.isEmpty() ? "" : updateNote + " | ") + baseStatus + " | " + locationText);
     }
 
     private void updateTopBar() {
-        topBar.setText("1 = Dézoomer    3 = Zoomer    5 = Réinitialiser");
+        topBar.setText("1 = Dézoomer \uD83D\uDD0D−  |  3 = Zoomer \uD83D\uDD0D+  |  5 = Recentrer");
     }
 
     private void setNote(final String note) {
@@ -536,7 +540,7 @@ public class MainActivity extends Activity {
         if (updating || gate == Gate.WORKING) return;
         updating = true;
         updateAvailable = false;
-        setNote("MaJ de carte...");
+        setNote("MaJ de carte…");
         try {
             GtfsImporter.Progress p = new GtfsImporter.Progress() {
                 @Override public void update(String msg) { setNote(msg); }
@@ -576,7 +580,7 @@ public class MainActivity extends Activity {
 
     /** Initial load (no data at all yet): blocks the screen, shows progress. download=false when a zip is already cached. */
     private void startBlocking(final boolean download) {
-        final String title = download ? "Téléchargement des données les plus à jour..." : "Préparation des données téléchargées...";
+        final String title = download ? "Téléchargement des données les plus à jour…" : "Préparation des données téléchargées…";
         showGate(Gate.WORKING, title + "\n\nPréparation", "");
         updating = true;
         bg.execute(new Runnable() {

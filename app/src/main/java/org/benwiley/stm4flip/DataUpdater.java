@@ -136,7 +136,7 @@ final class DataUpdater {
         out.getParentFile().mkdirs();
         tmp.delete();
         new File(tmp.getPath() + "-journal").delete();
-        prog.update("Chargement du fichier...");
+        prog.update("Chargement du fichier…");
         String md5 = md5(zip);
         String sig = readSig(ctx);
         SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(tmp.getPath(), null);
@@ -144,7 +144,7 @@ final class DataUpdater {
         try {
             SqlSink sink = new SqlSink(db);
             GtfsImporter.run(zip, sink, prog);
-            prog.update("Sauvegarde...");
+            prog.update("Sauvegarde…");
             sink.finish(md5, sig);
             ok = true;
         } finally {
