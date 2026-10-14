@@ -72,8 +72,7 @@ final class Transit {
                 if (ri >= 0) {
                     for (int i : idx) {
                         if (rt.route[i] != ri) continue;
-                        int d = rt.dir[i];
-                        boolean ok = d >= 0 ? d == line.dir : routeCount.get(line.route) == 1;
+                        boolean ok = routeCount.get(line.route) == 1 || rt.dir[i] == line.dir;
                         if (!ok) continue;
                         int sec = (int) (rt.time[i] - nowEpochSec);
                         if (sec >= -30 && sec < (MAX_LIVE_MINUTES + 1) * 60) liveSecs.add(sec);
