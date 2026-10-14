@@ -329,8 +329,8 @@ public class MainActivity extends Activity {
         } else {
             lastCenter = initialPosition;
             map.getController().setCenter(initialPosition);
-            startLocation();
         }
+        startLocation();
         userMoved = false;
         map.getController().setZoom(DEFAULT_ZOOM);
     }
