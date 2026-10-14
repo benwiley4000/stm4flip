@@ -90,7 +90,7 @@ public class MainActivity extends Activity {
     private LocationManager locationManager;
     private GeoPoint lastCenter = MONTREAL;
     private GeoPoint initialPosition = MONTREAL;
-    private boolean userMoved = false, haveFix = false;
+    private boolean userMoved = false;
     private int rowH;
     private float dp;
 
@@ -369,13 +369,12 @@ public class MainActivity extends Activity {
         } else {
             overlay.me = p;
         }
-        if (!haveFix && !userMoved) {
+        if (!userMoved) {
             lastCenter = p;
             map.getController().setCenter(p);
             map.getController().setZoom(DEFAULT_ZOOM);
             scheduleQuery(0);
         }
-        haveFix = true;
         map.invalidate();
         getSharedPreferences("lastpos", MODE_PRIVATE).edit()
                 .putFloat("lat", (float) p.getLatitude())
