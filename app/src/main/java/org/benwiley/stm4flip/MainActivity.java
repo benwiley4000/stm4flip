@@ -57,6 +57,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import android.content.SharedPreferences;
+import android.text.style.StrikethroughSpan;
 
 public class MainActivity extends Activity {
 
@@ -753,6 +754,11 @@ public class MainActivity extends Activity {
                 sb.setSpan(new ForegroundColorSpan(row.live[k] ? LIVE_BLUE : Color.BLACK), s, sb.length(),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 if (soon) sb.setSpan(new StyleSpan(Typeface.BOLD), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (row.skipped[k]) {
+                    int a = s;
+                    while (sb.charAt(a) == ' ') a++; // don't strike the padding spaces
+                    sb.setSpan(new StrikethroughSpan(), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
             }
             TextView tv = new TextView(this);
             tv.setTypeface(Typeface.MONOSPACE);

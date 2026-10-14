@@ -14,6 +14,8 @@ import java.util.Set;
 final class Transit {
 
     static final int MAX_ETAS = 3;
+    static final int STATIC_CANDIDATES = 8;   // scheduled times considered per line, so skipped slots can be found
+    static final int SKIP_MATCH_SEC = 300;    // match a skipped trip to the scheduled time within 5 min of its estimate
     static final int MAX_LIVE_MINUTES = 59;   // live ETAs further out than this are dropped; the scheduled time is shown instead
     private static final int[] EMPTY = new int[0];
 
@@ -25,6 +27,7 @@ final class Transit {
         int[] etaSec = EMPTY;      // seconds from now (filled by computeEtas)
         int[] clockMin = EMPTY;    // same moments as minutes since midnight (for showing scheduled times as clock times)
         boolean[] live = new boolean[0];
+        boolean[] skipped = new boolean[0];
     }
 
     static final class Stop {
@@ -40,6 +43,7 @@ final class Transit {
         int[] etaSec;
         int[] clockMin;
         boolean[] live;
+        boolean[] skipped;
     }
 
     // ------------------------------------------------------------------ ETAs
@@ -66,8 +70,9 @@ final class Transit {
             }
             List<Integer> idx = liveByStop.get(stop.id);
             for (Line line : stop.lines) {
-                // live
+                // live (skipped stops are kept apart: their time is only an estimate, used to find the scheduled slot)
                 List<Integer> liveSecs = new ArrayList<>();
+                List<Integer> skipSecs = new ArrayList<>();
                 int ri = (rt == null || idx == null) ? -1 : rt.routeIndex(line.route);
                 if (ri >= 0) {
                     for (int i : idx) {
@@ -75,29 +80,54 @@ final class Transit {
                         boolean ok = routeCount.get(line.route) == 1 || rt.dir[i] == line.dir;
                         if (!ok) continue;
                         int sec = (int) (rt.time[i] - nowEpochSec);
-                        if (sec >= -30 && sec < (MAX_LIVE_MINUTES + 1) * 60) liveSecs.add(sec);
+                        if (sec >= -30 && sec < (MAX_LIVE_MINUTES + 1) * 60) {
+                            if (rt.skipped[i]) skipSecs.add(sec); else liveSecs.add(sec);
+                        }
                     }
                     Collections.sort(liveSecs);
                 }
                 // schedule
-                int[] st = new int[2 * MAX_ETAS];
+                int[] st = new int[2 * STATIC_CANDIDATES];
                 int k = collect(line.today, 0, nowSecOfDay, st, 0);
                 k = collect(line.yesterday, 1440, nowSecOfDay, st, k);
                 Arrays.sort(st, 0, k);
 
-                int[] sec = new int[MAX_ETAS];
-                boolean[] lv = new boolean[MAX_ETAS];
-                int n = 0;
-                for (int v : liveSecs) {
-                    if (n == MAX_ETAS) break;
-                    sec[n] = v; lv[n] = true; n++;
+                // each skipped trip: flag the scheduled time closest to its estimate (within SKIP_MATCH_SEC)
+                boolean[] stSkip = new boolean[k];
+                List<Integer> unmatchedSkips = new ArrayList<>();
+                for (int e : skipSecs) {
+                    int bi = -1, bd = SKIP_MATCH_SEC + 1;
+                    for (int i = 0; i < k; i++) {
+                        int d = Math.abs(st[i] - e);
+                        if (!stSkip[i] && d < bd) { bd = d; bi = i; }
+                    }
+                    if (bi >= 0) stSkip[bi] = true; else unmatchedSkips.add(e);
                 }
-                int lastLive = n > 0 ? sec[n - 1] : Integer.MIN_VALUE / 2;
-                for (int i = 0; i < k && n < MAX_ETAS; i++) {
-                    if (st[i] > lastLive + 60) { sec[n] = st[i]; lv[n] = false; n++; }
+
+                // merge: live first; scheduled times after the last live one; skipped slots always
+                int liveCount = Math.min(liveSecs.size(), MAX_ETAS);
+                int lastLive = liveCount > 0 ? liveSecs.get(liveCount - 1) : Integer.MIN_VALUE / 2;
+                List<int[]> items = new ArrayList<>();   // {seconds, live?, skipped?}
+                for (int i = 0; i < liveCount; i++) items.add(new int[]{liveSecs.get(i), 1, 0});
+                for (int i = 0; i < k; i++) {
+                    if (stSkip[i]) items.add(new int[]{st[i], 0, 1});
+                    else if (st[i] > lastLive + 60) items.add(new int[]{st[i], 0, 0});
                 }
-                line.etaSec = Arrays.copyOf(sec, n);
-                line.live = Arrays.copyOf(lv, n);
+                for (int e : unmatchedSkips) items.add(new int[]{e, 0, 1});
+                Collections.sort(items, new Comparator<int[]>() {
+                    @Override public int compare(int[] x, int[] y) { return x[0] - y[0]; }
+                });
+                int n = Math.min(items.size(), MAX_ETAS);
+                int[] sec = new int[n];
+                boolean[] lv = new boolean[n], sk = new boolean[n];
+                for (int i = 0; i < n; i++) {
+                    sec[i] = items.get(i)[0];
+                    lv[i] = items.get(i)[1] == 1;
+                    sk[i] = items.get(i)[2] == 1;
+                }
+                line.etaSec = sec;
+                line.live = lv;
+                line.skipped = sk;
                 int[] clk = new int[n];
                 for (int q = 0; q < n; q++) {
                     int t = (nowSecOfDay + sec[q]) % 86400;
@@ -116,7 +146,7 @@ final class Transit {
             int sec = (m - offsetMin) * 60 - nowSec;
             if (sec >= -30) {
                 out[k++] = sec;
-                if (++c == MAX_ETAS) break;
+                if (++c == STATIC_CANDIDATES) break;
             }
         }
         return k;
@@ -181,6 +211,7 @@ final class Transit {
             r.etaSec = l.etaSec;
             r.clockMin = l.clockMin;
             r.live = l.live;
+            r.skipped = l.skipped;
             rows.add(r);
         }
         Collections.sort(rows, new Comparator<Row>() {

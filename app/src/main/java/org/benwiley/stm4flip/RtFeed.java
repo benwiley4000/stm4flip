@@ -29,6 +29,7 @@ final class RtFeed {
         int[] route = new int[4096];
         byte[] dir = new byte[4096];
         int[] time = new int[4096];
+        boolean[] skipped = new boolean[4096];
         String[] routeNames = new String[0];
         long fetchedMs;
 
@@ -143,28 +144,42 @@ final class RtFeed {
                 r.p += len;
             } else r.skip(wt);
         }
+        // A SKIPPED update has no time of its own: borrow the time of the nearest stop (by stop_sequence) that has one.
+        for (long[] u : updates) {
+            if (u[2] != 1 || u[1] != 0) continue;
+            long best = 0, bestDist = Long.MAX_VALUE;
+            for (long[] o : updates) {
+                if (o[1] == 0) continue;
+                long dist = Math.abs(o[3] - u[3]);
+                if (dist < bestDist) { bestDist = dist; best = o[1]; }
+            }
+            u[1] = best;
+        }
         if (routeId == null || updates.isEmpty()) return;
         Integer ri = routes.get(routeId);
         if (ri == null) { ri = names.size(); names.add(routeId); routes.put(routeId, ri); }
         for (long[] u : updates) {
+            if (u[1] == 0) continue;
             if (s.n == s.stop.length) {
                 int cap = s.n * 2;
                 s.stop = Arrays.copyOf(s.stop, cap);
                 s.route = Arrays.copyOf(s.route, cap);
                 s.dir = Arrays.copyOf(s.dir, cap);
                 s.time = Arrays.copyOf(s.time, cap);
+                s.skipped = Arrays.copyOf(s.skipped, cap);
             }
             s.stop[s.n] = (int) u[0];
             s.route[s.n] = ri;
             s.dir[s.n] = (byte) dir;
             s.time[s.n] = (int) u[1];
+            s.skipped[s.n] = u[2] == 1;
             s.n++;
         }
     }
 
     /** Returns {stopId, epochTime} or null if unusable (no stop id / no time / skipped). */
     private static long[] parseStopTimeUpdate(Reader r) {
-        long arrival = 0, departure = 0, stopId = -1, rel = 0;
+        long arrival = 0, departure = 0, stopId = -1, rel = 0, seq = 0;
         while (r.more()) {
             int tag = (int) r.varint();
             int f = tag >>> 3, wt = tag & 7;
@@ -183,11 +198,16 @@ final class RtFeed {
                 int len = (int) r.varint();
                 String sid = r.string(len);
                 try { stopId = Long.parseLong(sid.trim()); } catch (NumberFormatException ex) { stopId = -1; }
-            } else if (f == 5 && wt == 0) rel = r.varint();
+            } else if (f == 1 && wt == 0) {
+                seq = r.varint();
+            } else if (f == 5 && wt == 0) {
+                rel = r.varint();
+            }
             else r.skip(wt);
         }
         long t = arrival != 0 ? arrival : departure;
-        if (stopId < 0 || t == 0 || rel == 1 || rel == 2) return null;
-        return new long[]{stopId, t};
+        if (stopId < 0 || rel == 2) return null;        // NO_DATA: nothing useful
+        if (rel != 1 && t == 0) return null;             // a normal update needs a time
+        return new long[]{stopId, t, rel == 1 ? 1 : 0, seq};
     }
 }
