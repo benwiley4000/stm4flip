@@ -56,12 +56,16 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import android.content.SharedPreferences;
+
 public class MainActivity extends Activity {
 
     // ---- tweakables -------------------------------------------------------------------------
     static final int THEME = Color.parseColor("#0085CA");        // STM blue (bar color, stop dots)
     static final int LIVE_BLUE = THEME;     // live ETAs
     static final int GREY = Color.parseColor("#666666");
+    static final int ORANGE_DOT = Color.parseColor("#F28C00");
+    static final int LIGHTER_GREY_DOT = Color.parseColor("#9E9E9E");
     static final String USER_AGENT = "Stm4Flip/1.0 (therealbenwiley@gmail.com)";
     static final double DEFAULT_ZOOM = 15;
     static final double STOP_MARKERS_MIN_ZOOM = 13;     // 2 levels out from default: below this, no list / no requests
@@ -85,6 +89,7 @@ public class MainActivity extends Activity {
     private StopOverlay overlay;
     private LocationManager locationManager;
     private GeoPoint lastCenter = MONTREAL;
+    private GeoPoint initialPosition = MONTREAL;
     private boolean userMoved = false, haveFix = false;
     private int rowH;
     private float dp;
@@ -124,7 +129,7 @@ public class MainActivity extends Activity {
         @Override public void run() { query(false); ui.postDelayed(this, REFRESH_MS); }
     };
     private final LocationListener locationListener = new LocationListener() {
-        @Override public void onLocationChanged(Location loc) { onFix(loc); stopLocation(); }
+        @Override public void onLocationChanged(Location loc) { onFix(loc, false); stopLocation(); }
         @Override public void onStatusChanged(String p, int s, Bundle e) { }
         @Override public void onProviderEnabled(String p) { }
         @Override public void onProviderDisabled(String p) { }
@@ -142,6 +147,11 @@ public class MainActivity extends Activity {
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         dp = getResources().getDisplayMetrics().density;
 
+        SharedPreferences sp = getSharedPreferences("lastpos", MODE_PRIVATE);
+        if (sp.contains("lat")) {
+            initialPosition = new GeoPoint(sp.getFloat("lat", 0f), sp.getFloat("lon", 0f));
+        }
+
         map = new MapView(this);
         map.setTileSource(TileSourceFactory.MAPNIK);
         map.setMultiTouchControls(true);
@@ -149,7 +159,7 @@ public class MainActivity extends Activity {
         map.setMinZoomLevel(10.0);
         map.setMaxZoomLevel(19.0);
         map.getController().setZoom(DEFAULT_ZOOM);
-        map.getController().setCenter(lastCenter);
+        map.getController().setCenter(initialPosition);
         overlay = new StopOverlay();
         map.getOverlays().add(overlay);
         // when the list panel grows/shrinks the map gets shorter: keep the same point centred
@@ -220,6 +230,16 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(queryNow);
         stopLocation();
         map.onPause();
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        finishAndRemoveTask();   // any hiding closes the activity and removes it from recents
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());   // ends the process and all our threads
     }
 
     // ---------------------------------------------------------------- keys
@@ -301,14 +321,16 @@ public class MainActivity extends Activity {
 
     private void recenter() {
         if (overlay.me != null) {
-            userMoved = false;
             lastCenter = overlay.me;
             map.getController().setCenter(lastCenter);
-            map.getController().setZoom(DEFAULT_ZOOM);
             scheduleQuery(0);
         } else {
+            lastCenter = initialPosition;
+            map.getController().setCenter(initialPosition);
             startLocation();
         }
+        userMoved = false;
+        map.getController().setZoom(DEFAULT_ZOOM);
     }
 
     private void scheduleQuery(long delayMs) {
@@ -333,16 +355,20 @@ public class MainActivity extends Activity {
                 locationManager.requestLocationUpdates(prov, 0, 0, locationListener, Looper.getMainLooper());
             } catch (Exception ignored) { }
         }
-        if (best != null) onFix(best);
+        if (best != null) onFix(best, true);
     }
 
     private void stopLocation() {
         try { locationManager.removeUpdates(locationListener); } catch (Exception ignored) { }
     }
 
-    private void onFix(Location loc) {
+    private void onFix(Location loc, boolean stale) {
         GeoPoint p = new GeoPoint(loc.getLatitude(), loc.getLongitude());
-        overlay.me = p;
+        if (stale) {
+            initialPosition = p;
+        } else {
+            overlay.me = p;
+        }
         if (!haveFix && !userMoved) {
             lastCenter = p;
             map.getController().setCenter(p);
@@ -351,6 +377,10 @@ public class MainActivity extends Activity {
         }
         haveFix = true;
         map.invalidate();
+        getSharedPreferences("lastpos", MODE_PRIVATE).edit()
+                .putFloat("lat", (float) p.getLatitude())
+                .putFloat("lon", (float) p.getLongitude())
+                .apply();
     }
 
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
@@ -790,6 +820,7 @@ public class MainActivity extends Activity {
         private final Paint boxRing = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final Paint meDot = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint oldMeDot = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final GeoPoint tmp = new GeoPoint(0.0, 0.0);   // reused, so drawing doesn't allocate per stop
         private final RectF rect = new RectF();
         private int[] vi = new int[512];
@@ -804,7 +835,8 @@ public class MainActivity extends Activity {
             boxRing.setStrokeWidth(1.5f * dp);
             text.setColor(Color.BLACK);
             text.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11, getResources().getDisplayMetrics()));
-            meDot.setColor(Color.parseColor("#F28C00"));
+            meDot.setColor(ORANGE_DOT);
+            oldMeDot.setColor(LIGHTER_GREY_DOT);
         }
 
         /** Safe from any thread: swaps in the full stop list (called whenever a new database becomes active). */
@@ -894,6 +926,10 @@ public class MainActivity extends Activity {
                 proj.toPixels(me, pt);
                 c.drawCircle(pt.x, pt.y, 8 * dp, ring);
                 c.drawCircle(pt.x, pt.y, 6 * dp, meDot);
+            } else {
+                proj.toPixels(initialPosition, pt);
+                c.drawCircle(pt.x, pt.y, 8 * dp, ring);
+                c.drawCircle(pt.x, pt.y, 6 * dp, oldMeDot);
             }
         }
     }
