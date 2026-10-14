@@ -531,7 +531,7 @@ public class MainActivity extends Activity {
             avail = stale;                                                                   // offline: offer only if expired
         }
         updateAvailable = avail;
-        setNote(avail ? "9 = MaJ de carte" : "");
+        setNote(avail ? "9 = MàJ de carte" : "");
     }
 
     /**
@@ -542,7 +542,7 @@ public class MainActivity extends Activity {
         if (updating || gate == Gate.WORKING) return;
         updating = true;
         updateAvailable = false;
-        setNote("MaJ de carte…");
+        setNote("MàJ de carte…");
         try {
             GtfsImporter.Progress p = new GtfsImporter.Progress() {
                 @Override public void update(String msg) { setNote(msg); }
@@ -575,7 +575,7 @@ public class MainActivity extends Activity {
         } catch (Throwable t) {
             updating = false;
             updateAvailable = true;
-            setNote("9 = Réessayer MaJ");
+            setNote("9 = Réessayer MàJ");
             if (data == null) ui.post(new Runnable() { @Override public void run() { ensureData(); } });
         }
     }
@@ -615,7 +615,7 @@ public class MainActivity extends Activity {
                     ui.post(new Runnable() {
                         @Override public void run() {
                             String why = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
-                            showGate(Gate.ERROR, "Echec de MaJ:\n" + why + "\n\n9 = réessayer", "Réessayer");
+                            showGate(Gate.ERROR, "Echec de MàJ:\n" + why + "\n\n9 = réessayer", "Réessayer");
                         }
                     });
                 }

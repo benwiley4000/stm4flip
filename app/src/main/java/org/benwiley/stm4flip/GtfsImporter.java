@@ -120,7 +120,7 @@ final class GtfsImporter {
 
     private void go() throws IOException {
         // ---- routes (buses only)
-        prog.update("MaJ de routes…");
+        prog.update("MàJ de routes…");
         final List<String> routeIds = new ArrayList<>();
         final List<String> routeLabels = new ArrayList<>();
         final Map<String, Integer> routeIdx = new HashMap<>();
@@ -138,7 +138,7 @@ final class GtfsImporter {
                 directions.put(r.get("route_id") + "|" + toInt(r.get("direction_id")), r.get("direction")));
 
         // ---- trips
-        prog.update("MaJ de trajets…");
+        prog.update("MàJ de trajets…");
         ZipEntry te = zf.getEntry("trips.txt");
         if (te == null) throw new IOException("trips.txt n'existe pas");
         final LongIntMap tripMap = new LongIntMap((int) Math.min(3_000_000, Math.max(1024, te.getSize() / 40)));
@@ -182,7 +182,7 @@ final class GtfsImporter {
         votes.clear();
 
         // ---- calendar -> schedule profiles
-        prog.update("MaJ du calendrier…");
+        prog.update("MàJ du calendrier…");
         final int nSvc = svcIds.size();
         final boolean[][] weekdays = new boolean[nSvc][];
         final int[] startD = new int[nSvc], endD = new int[nSvc];
@@ -237,7 +237,7 @@ final class GtfsImporter {
             for (int s = profiles.get(p).nextSetBit(0); s >= 0; s = profiles.get(p).nextSetBit(s + 1)) profHas[p][s] = true;
 
         // ---- bus stops (no parent station, numeric id)
-        prog.update("MaJ des arrêts…");
+        prog.update("MàJ des arrêts…");
         final BitSet validStop = new BitSet();
         final Map<Integer, Object[]> stopInfo = new HashMap<>();
         readCsv("stops.txt", true, r -> {
@@ -328,7 +328,7 @@ final class GtfsImporter {
                 have = rest;
                 if (read - lastReport > (4 << 20)) {
                     lastReport = read;
-                    prog.update("MaJ de l'horaire " + (total > 0 ? (int) (100 * read / total) : 0) + "%");
+                    prog.update("MàJ de l'horaire " + (total > 0 ? (int) (100 * read / total) : 0) + "%");
                 }
             }
         }
