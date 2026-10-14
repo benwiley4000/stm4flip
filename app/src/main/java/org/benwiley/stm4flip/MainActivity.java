@@ -214,6 +214,8 @@ public class MainActivity extends Activity {
         content.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         buildGate(content);
         setContentView(content);
+
+        startLocation();
     }
 
     @Override protected void onResume() {
