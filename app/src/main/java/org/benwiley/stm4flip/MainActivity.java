@@ -218,7 +218,6 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         map.onResume();
-        startLocation();
         ensureData();
         ui.removeCallbacks(autoRefresh);
         ui.postDelayed(autoRefresh, 1000);
