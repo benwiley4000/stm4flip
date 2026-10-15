@@ -317,6 +317,7 @@ public class MainActivity extends Activity {
     }
 
     private void setZoomNow(double z) {
+        userMoved = true;
         map.getController().setZoom((double) Math.round(z));
         scheduleQuery(350);
     }
