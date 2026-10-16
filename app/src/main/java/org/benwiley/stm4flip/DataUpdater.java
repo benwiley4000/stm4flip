@@ -85,7 +85,7 @@ final class DataUpdater {
                     read += r;
                     if (read - last > 262_144) {
                         last = read;
-                        prog.update(String.format(Locale.US, total > 0 ? "Téléchargement %.1f/%.1f MB" : "Downloading %.1f MB",
+                        prog.update(String.format(Locale.US, total > 0 ? "Téléchargement %.1f/%.1f MB" : "Téléchargement %.1f MB",
                                 read / 1e6, total / 1e6));
                     }
                 }
