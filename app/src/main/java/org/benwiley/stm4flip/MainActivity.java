@@ -119,7 +119,8 @@ public class MainActivity extends Activity {
     private volatile long lastUpdateCheckMs = 0;
     private String updateNote = "";      // shown in front of the normal status text
     private String baseStatus = "Chargement…";
-    private String locationText = "Localisation…";
+    private String locationText = "\uD83D\uDCE1 Repérage…";
+    private String roamingText = "\uD83D\uDC40 5=Recentrer";
     private int gen = 0;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -314,12 +315,14 @@ public class MainActivity extends Activity {
         lastCenter = new GeoPoint(n.getLatitude(), n.getLongitude());
         map.getController().setCenter(lastCenter);
         scheduleQuery(350);
+        refreshBottomBar();
     }
 
     private void setZoomNow(double z) {
         userMoved = true;
         map.getController().setZoom((double) Math.round(z));
         scheduleQuery(350);
+        refreshBottomBar();
     }
 
     private void recenter() {
@@ -334,6 +337,7 @@ public class MainActivity extends Activity {
         startLocation();
         userMoved = false;
         map.getController().setZoom(DEFAULT_ZOOM);
+        refreshBottomBar();
     }
 
     private void scheduleQuery(long delayMs) {
@@ -347,10 +351,10 @@ public class MainActivity extends Activity {
     private void startLocation() {
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
-            locationText = "Position indispo";
+            locationText = "⚠\uFE0F Aucun GPS";
             return;
         }
-        locationText = "Localisation…";
+        locationText = "\uD83D\uDCE1 Repérage…";
         Location best = null;
         for (String prov : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
             try {
@@ -373,7 +377,7 @@ public class MainActivity extends Activity {
             initialPosition = p;
         } else {
             overlay.me = p;
-            locationText = "Localisé";
+            locationText = "✅ Localisé";
         }
         if (!userMoved) {
             lastCenter = p;
@@ -382,6 +386,7 @@ public class MainActivity extends Activity {
             scheduleQuery(0);
         }
         map.invalidate();
+        refreshBottomBar();
         getSharedPreferences("lastpos", MODE_PRIVATE).edit()
                 .putFloat("lat", (float) p.getLatitude())
                 .putFloat("lon", (float) p.getLongitude())
@@ -451,7 +456,9 @@ public class MainActivity extends Activity {
     private static final String ASK_UPDATE = "De nouvelles données de réseau sont disponibles (~50MB). Ça va télécharger et installer dans le fond. OK ?";
 
     private void refreshBottomBar() {
-        bottomBar.setText((updateNote.isEmpty() ? "" : updateNote + " | ") + baseStatus + " | " + locationText);
+        String lastText = overlay.me == null || map.getBoundingBox().contains(overlay.me)
+                ? locationText : roamingText;
+        bottomBar.setText((updateNote.isEmpty() ? "" : updateNote + " | ") + baseStatus + " | " + lastText);
     }
 
     private void updateTopBar() {
@@ -710,9 +717,15 @@ public class MainActivity extends Activity {
         Transit.computeEtas(stops, snap, nowMs / 1000, nowSec);
 
         int maxRows = boxes.length - 1;
-        int r = Math.min(rowsIn(stops, boxes[0], cLat, cLon).size(), maxRows);
+        // boxes[k] is exactly what's on screen when the list panel is k rows tall. Take the tallest panel k whose own
+        // box still holds at least k rows, so the area we analyse is the area that is really visible.
+        int r = 0;
+        for (int k = 1; k <= maxRows; k++) {
+            if (rowsIn(stops, boxes[k], cLat, cLon).size() >= k) r = k; else break;
+        }
         List<Transit.Row> rows = rowsIn(stops, boxes[r], cLat, cLon);
-        if (rows.size() > maxRows) rows = new ArrayList<>(rows.subList(0, maxRows));
+        int shown = Math.max(r, 1);   // (r == 0 but rows exist in the full-height box: show the soonest one)
+        if (rows.size() > shown) rows = new ArrayList<>(rows.subList(0, shown));
 
         int liveRows = 0;
         for (Transit.Row row : rows) for (boolean l : row.live) if (l) { liveRows++; break; }
