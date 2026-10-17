@@ -71,7 +71,7 @@ public class MainActivity extends Activity {
     static final int GREY = Color.parseColor("#666666");
     static final int ORANGE_DOT = Color.parseColor("#F28C00");
     static final int LIGHTER_GREY_DOT = Color.parseColor("#9E9E9E");
-    static final String USER_AGENT = "Stm4Flip/1.0 (therealbenwiley@gmail.com)";
+    static final String USER_AGENT = "Stm4Flip/1.2.0 (therealbenwiley@gmail.com)";
     static final double DEFAULT_ZOOM = 15;
     static final double STOP_MARKERS_MIN_ZOOM = 13;     // 2 levels out from default: below this, no list / no requests
     static final double LIST_MIN_ZOOM = 15;     // List of arriving buses
