@@ -189,7 +189,8 @@ final class Transit {
         }
     }
 
-    static String routesText(Stop s) {
+    /** The stop's lines in display order (same order as the words in routesText). */
+    static List<Line> sortedLines(Stop s) {
         List<Line> ls = new ArrayList<>(s.lines);
         Collections.sort(ls, new Comparator<Line>() {
             @Override public int compare(Line a, Line b) {
@@ -199,6 +200,41 @@ final class Transit {
                 return x != 0 ? x : a.dir - b.dir;
             }
         });
+        return ls;
+    }
+
+    /**
+     * One entry per route label of the stop, in routesText order. Bit 1: an arrival at this stop within the next
+     * 59 minutes (cancelled trips don't count). Bit 2: the live feed says a trip among the next 3 of this route
+     * skips this stop (independent of what the list shows, which may come from a different stop).
+     * Call after computeEtas.
+     */
+    static int[] labelStyles(Stop s, RtFeed.Snapshot rt) {
+        List<Line> ls = sortedLines(s);
+        Map<String, Integer> routeCount = new HashMap<>();
+        for (Line l : ls) {
+            Integer c = routeCount.get(l.route);
+            routeCount.put(l.route, c == null ? 1 : c + 1);
+        }
+        int[] out = new int[ls.size()];
+        for (int k = 0; k < out.length; k++) {
+            Line l = ls.get(k);
+            boolean soon = false;
+            for (int q = 0; q < l.etaSec.length; q++) {
+                if (l.flag[q] != 2 && isSoon(l.etaSec[q])) { soon = true; break; }
+            }
+            boolean skipped = false;
+            if (rt != null) {
+                String base = s.id + "|" + l.route;
+                skipped = rt.skippedSoonLines.contains(routeCount.get(l.route) == 1 ? base : base + "|" + l.dir);
+            }
+            out[k] = (soon ? 1 : 0) | (skipped ? 2 : 0);
+        }
+        return out;
+    }
+
+    static String routesText(Stop s) {
+        List<Line> ls = sortedLines(s);
         StringBuilder sb = new StringBuilder();
         for (Line l : ls) {
             if (sb.length() > 0) sb.append(' ');

@@ -60,6 +60,8 @@ import android.content.SharedPreferences;
 import android.text.style.StrikethroughSpan;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends Activity {
 
@@ -650,6 +652,7 @@ public class MainActivity extends Activity {
         List<Transit.Row> rows = new ArrayList<>();
         String status = "";
         Set<Integer> skippedStops = new HashSet<>();
+        Map<Integer, int[]> labelStyles = new HashMap<>();   // per stop: style of each route label in its bubble
     }
 
     /** Runs on the UI thread: works out the geographic boxes, then does the data work in the background. */
@@ -697,6 +700,7 @@ public class MainActivity extends Activity {
                     @Override public void run() {
                         if (myGen != gen || gate != Gate.NONE) return;   // superseded, or data is being replaced
                         overlay.skippedStops = res.skippedStops;
+                        overlay.labelStyles = res.labelStyles;
                         showRows(res.rows);
                         baseStatus = listPanel.getVisibility() == View.VISIBLE ? res.status : zoomPrompt;
                         refreshBottomBar();
@@ -741,6 +745,7 @@ public class MainActivity extends Activity {
             res.skippedStops = snap.skippedSoonStops;
         }
         Transit.computeEtas(stops, snap, nowMs / 1000, nowSec, flags);
+        for (Transit.Stop s : stops) res.labelStyles.put(s.id, Transit.labelStyles(s, snap));
 
         int maxRows = boxes.length - 1;
         // boxes[k] is exactly what's on screen when the list panel is k rows tall. Take the tallest panel k whose own
@@ -872,6 +877,11 @@ public class MainActivity extends Activity {
         private final Paint box = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint boxRing = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        volatile Map<Integer, int[]> labelStyles = new HashMap<>();   // stop id -> style of each route label (bit 1 bold, bit 2 amber italic)
+        private final Paint boxRingSkipped = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint textBold = new TextPaint(Paint.ANTI_ALIAS_FLAG);          // arrival within 59 min
+        private final TextPaint textSkipped = new TextPaint(Paint.ANTI_ALIAS_FLAG);       // skipped soon
+        private final TextPaint textSkippedBold = new TextPaint(Paint.ANTI_ALIAS_FLAG);   // both
         private final Paint meDot = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint oldMeDot = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final GeoPoint tmp = new GeoPoint(0.0, 0.0);   // reused, so drawing doesn't allocate per stop
@@ -890,8 +900,21 @@ public class MainActivity extends Activity {
             boxRing.setColor(THEME);
             boxRing.setStyle(Paint.Style.STROKE);
             boxRing.setStrokeWidth(1.5f * dp);
+            boxRingSkipped.setColor(SKIPPED_DOT);
+            boxRingSkipped.setStyle(Paint.Style.STROKE);
+            boxRingSkipped.setStrokeWidth(1.5f * dp);
+            float ts = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11, getResources().getDisplayMetrics());
             text.setColor(Color.BLACK);
-            text.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11, getResources().getDisplayMetrics()));
+            text.setTextSize(ts);
+            textBold.setColor(Color.BLACK);
+            textBold.setTextSize(ts);
+            textBold.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            textSkipped.setColor(SKIPPED_COLOR);
+            textSkipped.setTextSize(ts);
+            textSkipped.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.ITALIC));
+            textSkippedBold.setColor(SKIPPED_COLOR);
+            textSkippedBold.setTextSize(ts);
+            textSkippedBold.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC));
             meDot.setColor(ORANGE_DOT);
             oldMeDot.setColor(LIGHTER_GREY_DOT);
         }
@@ -903,7 +926,7 @@ public class MainActivity extends Activity {
             String rt = ss.stops[i].routesText;
             String[] ls = rt.isEmpty() ? new String[]{""} : rt.split(" ");
             float m = 0;
-            for (String ln : ls) m = Math.max(m, text.measureText(ln));
+            for (String ln : ls) m = Math.max(m, textSkippedBold.measureText(ln));
             ss.routeLines[i] = ls;
             ss.routeW[i] = m;
         }
@@ -911,9 +934,28 @@ public class MainActivity extends Activity {
         private void buildNames(StopSet ss, int i, int w) {
             Transit.Stop s = ss.stops[i];
             String l1 = TextUtils.ellipsize(s.name, text, w * 0.8f, TextUtils.TruncateAt.END).toString();
-            String l2 = TextUtils.ellipsize(s.routesText, text, w * 0.8f, TextUtils.TruncateAt.END).toString();
-            ss.nameLines[i] = new String[]{l1, l2};
-            ss.nameW[i] = Math.max(text.measureText(l1), text.measureText(l2));
+            String[] labels = ss.routeLines[i];          // built by the caller
+            float space = text.measureText(" "), join = 0;
+            for (int j = 0; j < labels.length; j++) join += textSkippedBold.measureText(labels[j]) + (j > 0 ? space : 0);
+            ss.nameLines[i] = new String[]{l1};
+            ss.nameW[i] = Math.max(text.measureText(l1), Math.min(join, w * 0.8f));
+        }
+
+        private Paint paintFor(int[] styles, int j) {
+            int st = (styles != null && j < styles.length) ? styles[j] : 0;
+            return st == 0 ? text : st == 1 ? textBold : st == 2 ? textSkipped : textSkippedBold;
+        }
+
+        /** All route labels of a stop on one line, each in its own style; "..." if they don't fit. */
+        private void drawRouteRow(Canvas c, String[] labels, int[] styles, float x, float baseline, float limit) {
+            float space = text.measureText(" "), cx = x;
+            for (int j = 0; j < labels.length; j++) {
+                Paint p = paintFor(styles, j);
+                float lw = p.measureText(labels[j]);
+                if (cx + lw > x + limit) { c.drawText("...", cx, baseline, text); break; }
+                c.drawText(labels[j], cx, baseline, p);
+                cx += lw + space;
+            }
         }
 
         @Override public void draw(Canvas c, MapView mv, boolean shadow) {
@@ -958,24 +1000,33 @@ public class MainActivity extends Activity {
                     float lineH = fm.descent - fm.ascent;
                     for (int k = 0; k < n; k++) {
                         int i = vi[k];
-                        String[] lines;
+                        Transit.Stop stop = ss.stops[i];
+                        int[] styles = labelStyles.get(stop.id);
+                        if (ss.routeLines[i] == null) buildRoutes(ss, i);
+                        String[] labels = ss.routeLines[i];
                         float tw;
                         if (names) {
                             if (ss.nameLines[i] == null) buildNames(ss, i, w);
-                            lines = ss.nameLines[i];
                             tw = ss.nameW[i];
                         } else {
-                            if (ss.routeLines[i] == null) buildRoutes(ss, i);
-                            lines = ss.routeLines[i];
                             tw = ss.routeW[i];
                         }
+                        int rows = names ? 2 : labels.length;
                         float x = vx[k], y = vy[k];
-                        float bw = tw + 2 * pad, bh = lines.length * lineH + 2 * pad;
+                        float bw = tw + 2 * pad, bh = rows * lineH + 2 * pad;
                         rect.set(x - bw / 2, y - r - 3 * dp - bh, x + bw / 2, y - r - 3 * dp);
                         c.drawRoundRect(rect, 5 * dp, 5 * dp, box);
-                        c.drawRoundRect(rect, 5 * dp, 5 * dp, boxRing);
+                        c.drawRoundRect(rect, 5 * dp, 5 * dp, skippedStops.contains(stop.id) ? boxRingSkipped : boxRing);
                         float base = rect.top + pad - fm.ascent;
-                        for (String ln : lines) { c.drawText(ln, rect.left + pad, base, text); base += lineH; }
+                        if (names) {
+                            c.drawText(ss.nameLines[i][0], rect.left + pad, base, text);
+                            drawRouteRow(c, labels, styles, rect.left + pad, base + lineH, w * 0.8f);
+                        } else {
+                            for (int j = 0; j < labels.length; j++) {
+                                c.drawText(labels[j], rect.left + pad, base, paintFor(styles, j));
+                                base += lineH;
+                            }
+                        }
                     }
                 }
             }

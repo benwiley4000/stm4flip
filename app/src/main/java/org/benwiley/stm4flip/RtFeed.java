@@ -40,6 +40,7 @@ final class RtFeed {
         long[] canceledId = new long[64];
         int[] canceledDate = new int[64];
         Set<Integer> skippedSoonStops = new HashSet<>();   // stops where one of the next 3 trips of some line is skipped
+        Set<String> skippedSoonLines = new HashSet<>();    // "stop|route" and "stop|route|dir" of lines with a skipped trip among their next 3
         long fetchedMs;
 
         int routeIndex(String name) {
@@ -223,15 +224,23 @@ final class RtFeed {
         }
         Arrays.sort(packed, 0, m);
         Set<Integer> out = new HashSet<>();
+        Set<String> lines = new HashSet<>();
         long curKey = -1;
         int rank = 0;
         for (int i = 0; i < m; i++) {
             long key = packed[i] >>> 21;
             if (key != curKey) { curKey = key; rank = 0; }
-            if ((packed[i] & 1) == 1 && rank < 3) out.add((int) (key >>> 13));
+            if ((packed[i] & 1) == 1 && rank < 3) {
+                int stop = (int) (key >>> 13);
+                out.add(stop);
+                String lineKey = stop + "|" + s.routeNames[(int) ((key >>> 1) & 0xFFF)];
+                lines.add(lineKey);                        // skipped soon in either direction
+                lines.add(lineKey + "|" + (key & 1));      // ... in this feed direction
+            }
             rank++;
         }
         s.skippedSoonStops = out;
+        s.skippedSoonLines = lines;
     }
 
     /** Returns {stopId, epochTime} or null if unusable (no stop id / no time / skipped). */
