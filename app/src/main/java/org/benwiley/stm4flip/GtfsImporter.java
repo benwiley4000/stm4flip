@@ -32,6 +32,8 @@ final class GtfsImporter {
         void blob(int id, byte[] data);
         void sched(int lineId, int profile, int blobId);
         void day(int yyyymmdd, int profile);
+        void pattern(int id, String route, int dir, byte[] stops); // a distinct list of stops for a route/direction
+        void trip(long tripId, int pattern, int startMin, byte[] offsets); // one trip: its pattern + minutes at each stop
     }
 
     interface Progress { void update(String msg); }
@@ -261,6 +263,7 @@ final class GtfsImporter {
         LongIntMap tripleMap = new LongIntMap(32768);
         IntList tripleStop = new IntList(), tripleRd = new IntList();
 
+        TripWriter tw = new TripWriter(sink, routeIds);
         try (InputStream in = zf.getInputStream(se)) {
             byte[] buf = new byte[1 << 17];
             int have = 0, cTrip = -1, cDep = -1, cArr = -1, cStop = -1, cPick = -1;
@@ -309,6 +312,8 @@ final class GtfsImporter {
                         }
                         int info = tripMap.get(tkey, -1);
                         int minutes = dep >= 0 ? dep : arr;
+                        if (info >= 0 && tkey >= 0 && minutes >= 0)    // every stop of every bus trip, for the trips table
+                            tw.row(tkey, info & 0x1FFF, (stopId >= 0 && validStop.get(stopId)) ? stopId : 0, minutes);
                         if (info >= 0 && !noPickup && stopId >= 0 && minutes >= 0 && minutes < 4096 && validStop.get(stopId)) {
                             int rd = info & 0x1FFF;
                             int svc = info >>> 13;
@@ -333,6 +338,7 @@ final class GtfsImporter {
             }
         }
 
+        tw.finish();
         prog.update("Triage d'horaire…");
         Arrays.sort(entries, 0, n);
 
@@ -441,6 +447,66 @@ final class GtfsImporter {
         int m = 0, digits = 0;
         while (i < to && b[i] >= '0' && b[i] <= '9' && digits < 2) { m = m * 10 + (b[i++] - '0'); digits++; }
         return h * 60 + m;
+    }
+
+    private static byte[] encodePlain(int[] values) {
+        byte[] out = new byte[values.length * 5 + 8];
+        int len = 0;
+        for (int v : values) {
+            int x = v;
+            while (x > 0x7F) { out[len++] = (byte) ((x & 0x7F) | 0x80); x >>>= 7; }
+            out[len++] = (byte) x;
+        }
+        return Arrays.copyOf(out, len);
+    }
+
+    private static final class PatternKey {
+        final int rd;
+        final int[] stops;
+        final int h;
+        PatternKey(int rd, int[] stops) { this.rd = rd; this.stops = stops; this.h = 31 * Arrays.hashCode(stops) + rd; }
+        @Override public int hashCode() { return h; }
+        @Override public boolean equals(Object o) {
+            return o instanceof PatternKey && ((PatternKey) o).rd == rd && Arrays.equals(((PatternKey) o).stops, stops);
+        }
+    }
+
+    /** Stores each bus trip as (shared stop-list pattern, start minute, minute deltas). */
+    private static final class TripWriter {
+        private final Sink sink;
+        private final List<String> routeIds;
+        private final Map<PatternKey, Integer> patternIds = new HashMap<>();
+        private long cur = -1;
+        private int curRd, n;
+        private int[] stops = new int[128], mins = new int[128];
+
+        TripWriter(Sink sink, List<String> routeIds) { this.sink = sink; this.routeIds = routeIds; }
+
+        void row(long tripKey, int rd, int stopId, int minutes) {
+            if (tripKey != cur) { finish(); cur = tripKey; curRd = rd; }
+            if (n == stops.length) { stops = Arrays.copyOf(stops, n * 2); mins = Arrays.copyOf(mins, n * 2); }
+            stops[n] = stopId;
+            mins[n] = minutes;
+            n++;
+        }
+
+        void finish() {
+            if (cur >= 0 && n > 0) {
+                int[] s = Arrays.copyOf(stops, n);
+                PatternKey pk = new PatternKey(curRd, s);
+                Integer pid = patternIds.get(pk);
+                if (pid == null) {
+                    pid = patternIds.size() + 1;
+                    patternIds.put(pk, pid);
+                    sink.pattern(pid, routeIds.get(curRd >> 1), curRd & 1, encodePlain(s));
+                }
+                int[] deltas = new int[n - 1];
+                for (int i = 1; i < n; i++) deltas[i - 1] = Math.max(0, mins[i] - mins[i - 1]);
+                sink.trip(cur, pid, mins[0], encodePlain(deltas));
+            }
+            cur = -1;
+            n = 0;
+        }
     }
 
     private static final class BlobKey {

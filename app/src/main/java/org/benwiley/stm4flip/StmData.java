@@ -12,6 +12,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.util.Collection;
+
 /** Read-only access to the offline STM schedule database (built on the phone by DataUpdater/GtfsImporter). */
 final class StmData {
 
@@ -39,6 +41,44 @@ final class StmData {
 
     void close() {
         try { db.close(); } catch (Exception ignored) { }
+    }
+
+    /** False for a database built before the trips table existed (needs rebuilding from the zip). */
+    boolean hasTrips() {
+        return "2".equals(meta("schema"));
+    }
+
+    /** Stop list + minute at each stop for the given trip ids. Empty if the database has no trips table. */
+    Map<Long, Transit.TripInfo> tripInfos(Collection<Long> ids) {
+        Map<Long, Transit.TripInfo> out = new HashMap<>();
+        List<Long> list = new ArrayList<>(ids);
+        try {
+            for (int i = 0; i < list.size(); i += 300) {
+                StringBuilder in = new StringBuilder();
+                for (long id : list.subList(i, Math.min(i + 300, list.size()))) {
+                    if (in.length() > 0) in.append(',');
+                    in.append(id);
+                }
+                String sql = "SELECT t.trip_id, p.route, p.dir, p.stops, t.start, t.offsets FROM trips t"
+                        + " JOIN patterns p ON p.id = t.pattern WHERE t.trip_id IN (" + in + ")";
+                try (Cursor c = db.rawQuery(sql, null)) {
+                    while (c.moveToNext()) {
+                        Transit.TripInfo ti = new Transit.TripInfo();
+                        ti.route = c.getString(1);
+                        ti.dir = c.getInt(2);
+                        ti.stops = Transit.decodePlain(c.getBlob(3));
+                        int[] cum = Transit.decode(c.getBlob(5));       // minutes after the first stop, cumulative
+                        ti.minutes = new int[ti.stops.length];
+                        for (int k = 0; k < ti.minutes.length; k++)
+                            ti.minutes[k] = c.getInt(4) + (k == 0 || k - 1 >= cum.length ? 0 : cum[k - 1]);
+                        out.put(c.getLong(0), ti);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // old database without the trips table: no cancelled/skipped marking until it is rebuilt
+        }
+        return out;
     }
 
     /** Value from the meta table (zip_md5, server_sig, ...), or "" if absent / table missing. */

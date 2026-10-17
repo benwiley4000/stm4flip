@@ -167,7 +167,7 @@ final class DataUpdater {
 
     private static final class SqlSink implements GtfsImporter.Sink {
         private final SQLiteDatabase db;
-        private final SQLiteStatement stStop, stLine, stBlob, stSched, stDay;
+        private final SQLiteStatement stStop, stLine, stBlob, stSched, stDay, stPattern, stTrip;
 
         SqlSink(SQLiteDatabase db) {
             this.db = db;
@@ -177,12 +177,16 @@ final class DataUpdater {
             db.execSQL("CREATE TABLE blobs(id INTEGER PRIMARY KEY, data BLOB)");
             db.execSQL("CREATE TABLE days(date INTEGER PRIMARY KEY, profile INTEGER)");
             db.execSQL("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)");
+            db.execSQL("CREATE TABLE patterns(id INTEGER PRIMARY KEY, route TEXT, dir INTEGER, stops BLOB)");
+            db.execSQL("CREATE TABLE trips(trip_id INTEGER PRIMARY KEY, pattern INTEGER, start INTEGER, offsets BLOB)");
             db.beginTransaction();
             stStop = db.compileStatement("INSERT INTO stops VALUES(?,?,?,?)");
             stLine = db.compileStatement("INSERT INTO lines VALUES(?,?,?,?,?,?)");
             stBlob = db.compileStatement("INSERT INTO blobs VALUES(?,?)");
             stSched = db.compileStatement("INSERT INTO sched VALUES(?,?,?)");
             stDay = db.compileStatement("INSERT INTO days VALUES(?,?)");
+            stPattern = db.compileStatement("INSERT INTO patterns VALUES(?,?,?,?)");
+            stTrip = db.compileStatement("INSERT OR REPLACE INTO trips VALUES(?,?,?,?)");
         }
 
         @Override public void stop(int id, String name, double lat, double lon) {
@@ -207,10 +211,20 @@ final class DataUpdater {
             stDay.executeInsert();
         }
 
+        @Override public void pattern(int id, String route, int dir, byte[] stops) {
+            stPattern.bindLong(1, id); stPattern.bindString(2, route); stPattern.bindLong(3, dir); stPattern.bindBlob(4, stops);
+            stPattern.executeInsert();
+        }
+        @Override public void trip(long tripId, int pattern, int startMin, byte[] offsets) {
+            stTrip.bindLong(1, tripId); stTrip.bindLong(2, pattern); stTrip.bindLong(3, startMin); stTrip.bindBlob(4, offsets);
+            stTrip.executeInsert();
+        }
+
         /** md5 identifies exactly which zip this database was built from; sig is the server's version tag for it. */
         void finish(String md5, String sig) {
             db.execSQL("INSERT INTO meta VALUES('zip_md5', ?)", new Object[]{md5});
             db.execSQL("INSERT INTO meta VALUES('server_sig', ?)", new Object[]{sig});
+            db.execSQL("INSERT INTO meta VALUES('schema', '2')");   // 2 = has the trips/patterns tables
             db.execSQL("INSERT INTO meta VALUES('built_at', ?)", new Object[]{String.valueOf(System.currentTimeMillis())});
             db.setTransactionSuccessful();
             db.endTransaction();

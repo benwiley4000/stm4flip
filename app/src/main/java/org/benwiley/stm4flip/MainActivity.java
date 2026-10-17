@@ -57,6 +57,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import android.content.SharedPreferences;
+import android.text.style.StrikethroughSpan;
+import java.util.HashSet;
+import java.util.Set;
 
 public class MainActivity extends Activity {
 
@@ -77,6 +80,8 @@ public class MainActivity extends Activity {
     static final int MAX_ROWS = 8;              // never more list rows than this
     static final float MAX_LIST_FRACTION = 0.45f;  // list never takes more than this share of the height
     static final long REFRESH_MS = 60_000;
+    static final int SKIPPED_COLOR = Color.parseColor("#D99A00");   // list text: bus passes but won't stop here (amber: plain yellow is unreadable on white)
+    static final int SKIPPED_DOT = Color.parseColor("#F5B400");     // map dot of a stop that will be skipped soon
     static final long RT_MAX_AGE_MS = 30_000;
     // -----------------------------------------------------------------------------------------
 
@@ -523,7 +528,7 @@ public class MainActivity extends Activity {
         try {
             if (DataUpdater.hasZip(this)) {
                 String md5 = DataUpdater.md5(DataUpdater.zipFile(this));
-                if (!md5.equals(d.meta("zip_md5"))) { backgroundUpdate(false); return; }
+                if (!md5.equals(d.meta("zip_md5")) || !d.hasTrips()) { backgroundUpdate(false); return; }
             }
         } catch (Exception ignored) { }
         checkServer();
@@ -544,6 +549,7 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             avail = stale;                                                                   // offline: offer only if expired
         }
+        if (!d.hasTrips()) avail = true;   // built by an older version of the app: rebuild to get cancelled/skipped info
         updateAvailable = avail;
         setNote(avail ? "9 = MàJ de carte" : "");
     }
@@ -643,6 +649,7 @@ public class MainActivity extends Activity {
         List<Transit.Stop> stops = new ArrayList<>();
         List<Transit.Row> rows = new ArrayList<>();
         String status = "";
+        Set<Integer> skippedStops = new HashSet<>();
     }
 
     /** Runs on the UI thread: works out the geographic boxes, then does the data work in the background. */
@@ -689,6 +696,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     @Override public void run() {
                         if (myGen != gen || gate != Gate.NONE) return;   // superseded, or data is being replaced
+                        overlay.skippedStops = res.skippedStops;
                         showRows(res.rows);
                         baseStatus = listPanel.getVisibility() == View.VISIBLE ? res.status : zoomPrompt;
                         refreshBottomBar();
@@ -720,7 +728,19 @@ public class MainActivity extends Activity {
                 if (snap != null && nowMs - snap.fetchedMs > 180_000) { snap = null; rt = null; }
             }
         }
-        Transit.computeEtas(stops, snap, nowMs / 1000, nowSec);
+        Transit.Flags flags = null;
+        if (snap != null) {
+            Set<Integer> want = new HashSet<>();
+            for (Transit.Stop s : stops) want.add(s.id);
+            Set<Long> ids = Transit.neededTripIds(snap, want);
+            if (!ids.isEmpty()) {
+                Calendar yesterday = (Calendar) now.clone();
+                yesterday.add(Calendar.DAY_OF_MONTH, -1);
+                flags = Transit.buildFlags(d.tripInfos(ids), snap, want, dayInt(now), dayInt(yesterday));
+            }
+            res.skippedStops = snap.skippedSoonStops;
+        }
+        Transit.computeEtas(stops, snap, nowMs / 1000, nowSec, flags);
 
         int maxRows = boxes.length - 1;
         // boxes[k] is exactly what's on screen when the list panel is k rows tall. Take the tallest panel k whose own
@@ -770,9 +790,18 @@ public class MainActivity extends Activity {
                         soon ? Transit.fmt(row.etaSec[k]) : Transit.fmtClock(row.clockMin[k]));
                 int s = sb.length();
                 sb.append(t);
-                sb.setSpan(new ForegroundColorSpan(row.live[k] ? LIVE_BLUE : Color.BLACK), s, sb.length(),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                if (soon) sb.setSpan(new StyleSpan(Typeface.BOLD), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                // flag 1: the bus passes this (closed) stop without stopping -> scheduled time in amber italics
+                // flag 2: the trip is cancelled -> scheduled time struck through
+                int flag = row.flag[k];
+                sb.setSpan(new ForegroundColorSpan(row.live[k] ? LIVE_BLUE : (flag == 1 ? SKIPPED_COLOR : Color.BLACK)),
+                        s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                int style = soon ? (flag == 1 ? Typeface.BOLD_ITALIC : Typeface.BOLD) : (flag == 1 ? Typeface.ITALIC : Typeface.NORMAL);
+                if (style != Typeface.NORMAL) sb.setSpan(new StyleSpan(style), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (flag == 2) {
+                    int a = s;
+                    while (sb.charAt(a) == ' ') a++;    // don't strike the padding spaces
+                    sb.setSpan(new StrikethroughSpan(), a, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
             }
             TextView tv = new TextView(this);
             tv.setTypeface(Typeface.MONOSPACE);
@@ -850,8 +879,12 @@ public class MainActivity extends Activity {
         private int[] vi = new int[512];
         private float[] vx = new float[512], vy = new float[512];
 
+        volatile Set<Integer> skippedStops = new HashSet<>();   // stops to draw in amber
+        private final Paint dotSkipped = new Paint(Paint.ANTI_ALIAS_FLAG);
+
         StopOverlay() {
             dot.setColor(THEME);
+            dotSkipped.setColor(SKIPPED_DOT);
             ring.setColor(Color.WHITE);
             box.setColor(Color.WHITE);
             boxRing.setColor(THEME);
@@ -915,7 +948,7 @@ public class MainActivity extends Activity {
                     vi[n] = i; vx[n] = pt.x; vy[n] = pt.y;
                     n++;
                     c.drawCircle(pt.x, pt.y, r + dp, ring);
-                    c.drawCircle(pt.x, pt.y, r, dot);
+                    c.drawCircle(pt.x, pt.y, r, skippedStops.contains(s.id) ? dotSkipped : dot);
                 }
 
                 if (zoom >= ROUTES_ZOOM - 0.01 && n > 0) {
@@ -956,5 +989,9 @@ public class MainActivity extends Activity {
                 c.drawCircle(pt.x, pt.y, 6 * dp, oldMeDot);
             }
         }
+    }
+
+    private static int dayInt(Calendar c) {
+        return c.get(Calendar.YEAR) * 10000 + (c.get(Calendar.MONTH) + 1) * 100 + c.get(Calendar.DAY_OF_MONTH);
     }
 }
