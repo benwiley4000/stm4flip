@@ -63,6 +63,9 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 
+import android.content.Context;
+import android.os.PowerManager;
+
 public class MainActivity extends Activity {
 
     // ---- tweakables -------------------------------------------------------------------------
@@ -136,6 +139,11 @@ public class MainActivity extends Activity {
     private final Runnable queryNow = new Runnable() { @Override public void run() { query(false); } };
     private final Runnable autoRefresh = new Runnable() {
         @Override public void run() { query(false); ui.postDelayed(this, REFRESH_MS); }
+    };
+    private final Runnable finishAndRemoveTaskAfter = new Runnable() {
+        @Override public void run() {
+            finishAndRemoveTask();
+        }
     };
     private final LocationListener locationListener = new LocationListener() {
         @Override public void onLocationChanged(Location loc) { onFix(loc, false); stopLocation(); }
@@ -231,6 +239,7 @@ public class MainActivity extends Activity {
         map.onResume();
         ensureData();
         ui.removeCallbacks(autoRefresh);
+        ui.removeCallbacks(finishAndRemoveTaskAfter);
         ui.postDelayed(autoRefresh, 1000);
     }
 
@@ -238,13 +247,23 @@ public class MainActivity extends Activity {
         super.onPause();
         ui.removeCallbacks(autoRefresh);
         ui.removeCallbacks(queryNow);
-        stopLocation();
+        ui.removeCallbacks(finishAndRemoveTaskAfter);
+        // Actually don't stop location cause the GPS might be taking 10 years to load
+        // stopLocation();
         map.onPause();
     }
 
     @Override protected void onStop() {
         super.onStop();
-        finishAndRemoveTask();   // any hiding closes the activity and removes it from recents
+
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        boolean isScreenOn = powerManager != null && powerManager.isInteractive();
+
+        if (isScreenOn) {
+            finishAndRemoveTask();
+        } else {
+            ui.postDelayed(finishAndRemoveTaskAfter, 5 * 60 * 1000L);
+        }
     }
 
     @Override protected void onDestroy() {
