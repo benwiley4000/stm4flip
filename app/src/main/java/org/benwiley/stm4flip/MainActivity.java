@@ -167,6 +167,7 @@ public class MainActivity extends Activity {
         SharedPreferences sp = getSharedPreferences("lastpos", MODE_PRIVATE);
         if (sp.contains("lat")) {
             initialPosition = new GeoPoint(sp.getFloat("lat", 0f), sp.getFloat("lon", 0f));
+            lastCenter = initialPosition;
         }
 
         map = new MapView(this);
